@@ -50,7 +50,7 @@ cryptography==41.0.4
 
 # Performance and Caching
 redis==5.0.0
-celery==5.3.2
+celery==5.3.6
 
 # Utilities
 click==8.1.7
