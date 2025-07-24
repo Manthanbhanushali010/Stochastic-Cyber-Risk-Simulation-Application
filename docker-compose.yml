@@ -1,0 +1,192 @@
+version: '3.8'
+
+services:
+  # Database Service
+  db:
+    image: postgres:15-alpine
+    container_name: cyber_risk_db
+    environment:
+      POSTGRES_DB: cyber_risk
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init_db.sql:/docker-entrypoint-initdb.d/init_db.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cyber_risk_network
+
+  # Redis Service (for caching and Celery)
+  redis:
+    image: redis:7-alpine
+    container_name: cyber_risk_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cyber_risk_network
+
+  # Backend Service
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: cyber_risk_backend
+    environment:
+      FLASK_ENV: docker
+      DATABASE_URL: postgresql://postgres:password@db:5432/cyber_risk
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: your-secret-key-change-in-production
+      JWT_SECRET_KEY: your-jwt-secret-key-change-in-production
+      CORS_ORIGINS: http://localhost:3000,http://frontend:3000
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./backend:/app
+      - backend_uploads:/app/uploads
+      - backend_logs:/app/logs
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - cyber_risk_network
+    restart: unless-stopped
+
+  # Frontend Service
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: cyber_risk_frontend
+    environment:
+      NODE_ENV: production
+      REACT_APP_API_URL: http://backend:5000/api
+      REACT_APP_WS_URL: ws://backend:5000
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend/src:/app/src:ro
+      - ./frontend/public:/app/public:ro
+    depends_on:
+      - backend
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - cyber_risk_network
+    restart: unless-stopped
+
+  # Nginx Reverse Proxy (Optional - for production)
+  nginx:
+    image: nginx:alpine
+    container_name: cyber_risk_nginx
+    profiles:
+      - production
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/ssl:/etc/ssl
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - cyber_risk_network
+    restart: unless-stopped
+
+  # Celery Worker (for background tasks)
+  celery_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: cyber_risk_celery_worker
+    profiles:
+      - with-celery
+    environment:
+      FLASK_ENV: docker
+      DATABASE_URL: postgresql://postgres:password@db:5432/cyber_risk
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: your-secret-key-change-in-production
+    command: celery -A app.celery worker --loglevel=info
+    volumes:
+      - ./backend:/app
+      - backend_uploads:/app/uploads
+      - backend_logs:/app/logs
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - cyber_risk_network
+    restart: unless-stopped
+
+  # Celery Beat (for scheduled tasks)
+  celery_beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: cyber_risk_celery_beat
+    profiles:
+      - with-celery
+    environment:
+      FLASK_ENV: docker
+      DATABASE_URL: postgresql://postgres:password@db:5432/cyber_risk
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: your-secret-key-change-in-production
+    command: celery -A app.celery beat --loglevel=info
+    volumes:
+      - ./backend:/app
+      - backend_uploads:/app/uploads
+      - backend_logs:/app/logs
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - cyber_risk_network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  backend_uploads:
+    driver: local
+  backend_logs:
+    driver: local
+  frontend_node_modules:
+    driver: local
+
+networks:
+  cyber_risk_network:
+    driver: bridge
+
+# For development, use:
+# docker-compose -f docker-compose.yml -f docker-compose.dev.yml up 
