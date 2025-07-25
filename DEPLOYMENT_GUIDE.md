@@ -1,498 +1,531 @@
-# Stochastic Cyber Risk Simulation Application - Deployment Guide
+# 🌐 Production Deployment Guide
+## Stochastic Cyber Risk Simulation Application
 
-## Overview
+This guide provides step-by-step instructions for deploying the complete enterprise-grade cyber risk simulation platform to production.
 
-This is a production-ready **Stochastic Cyber Risk Simulation Application** that provides Monte Carlo simulations for cyber risk assessment with a modern React frontend and Flask backend.
+## 🏗️ System Architecture
 
-## 🏗️ Architecture
-
-- **Frontend**: React 18 with TypeScript, Zustand for state management, Chart.js and Plotly for visualizations
-- **Backend**: Flask with SQLAlchemy, JWT authentication, WebSocket support
-- **Database**: PostgreSQL 15 for data persistence
-- **Cache**: Redis for session management and real-time features
-- **Simulation Engine**: Custom Monte Carlo engine with multiple probability distributions
-- **Containerization**: Docker and Docker Compose for easy deployment
-
-## 📋 Prerequisites
-
-Before deploying the application, ensure you have:
-
-- **Docker** (version 20.10+)
-- **Docker Compose** (version 2.0+)
-- **Git** for cloning the repository
-- **Node.js 18+** (for local frontend development)
-- **Python 3.11+** (for local backend development)
-
-## 🚀 Quick Start (Docker Deployment)
-
-### 1. Clone and Prepare
-
-```bash
-# Clone the repository
-git clone <repository-url>
-cd "Stochastic Cyber Risk Simulation Application"
-
-# Create environment files
-cp backend/.env.example backend/.env
-cp frontend/.env.example frontend/.env
+```mermaid
+graph TB
+    subgraph "Load Balancer"
+        LB[Nginx Load Balancer]
+    end
+    
+    subgraph "Frontend Tier"
+        FE1[React App Instance 1]
+        FE2[React App Instance 2]
+    end
+    
+    subgraph "Backend Tier"
+        BE1[Flask API Instance 1]
+        BE2[Flask API Instance 2]
+        BE3[Flask API Instance 3]
+    end
+    
+    subgraph "Database Tier"
+        DB[(PostgreSQL Primary)]
+        DB_REPLICA[(PostgreSQL Replica)]
+    end
+    
+    subgraph "Cache & Queue"
+        REDIS[(Redis Cluster)]
+        CELERY[Celery Workers]
+    end
+    
+    subgraph "Monitoring Stack"
+        PROM[Prometheus]
+        GRAF[Grafana]
+        ALERT[AlertManager]
+    end
+    
+    LB --> FE1
+    LB --> FE2
+    FE1 --> BE1
+    FE2 --> BE2
+    BE1 --> DB
+    BE2 --> DB
+    BE3 --> DB_REPLICA
+    BE1 --> REDIS
+    BE2 --> REDIS
+    CELERY --> REDIS
+    PROM --> BE1
+    PROM --> BE2
+    PROM --> BE3
+    GRAF --> PROM
+    ALERT --> PROM
 ```
 
-### 2. Configure Environment
+## 🚀 Quick Start
 
-Edit `backend/.env`:
+### Prerequisites
+- Docker & Docker Compose
+- Domain name and SSL certificates
+- At least 8GB RAM, 4 CPU cores, 100GB storage
+
+### 1. Clone & Configure
+```bash
+git clone https://github.com/Manthanbhanushali010/Stochastic-Cyber-Risk-Simulation-Application.git
+cd Stochastic-Cyber-Risk-Simulation-Application
+
+# Copy environment templates
+cp .env.example .env.prod
+cp backend/.env.example backend/.env.prod
+cp frontend/.env.example frontend/.env.prod
+```
+
+### 2. Production Environment Setup
+```bash
+# Edit production configuration
+nano .env.prod
+```
+
 ```env
-FLASK_ENV=docker
-DATABASE_URL=postgresql://postgres:password@db:5432/cyber_risk
+# Production Environment Configuration
+COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml:docker-compose.monitoring.yml
+FLASK_ENV=production
+NODE_ENV=production
+
+# Database
+DATABASE_URL=postgresql://cyber_user:secure_password@postgres:5432/cyber_risk_prod
+POSTGRES_DB=cyber_risk_prod
+POSTGRES_USER=cyber_user
+POSTGRES_PASSWORD=secure_password_here
+
+# Security
+SECRET_KEY=your-super-secure-secret-key-here
+JWT_SECRET_KEY=your-jwt-secret-key-here
+
+# Redis
 REDIS_URL=redis://redis:6379/0
-SECRET_KEY=your-super-secret-key-change-this-in-production
-JWT_SECRET_KEY=your-jwt-secret-change-this-in-production
-JWT_ACCESS_TOKEN_EXPIRES=3600
-JWT_REFRESH_TOKEN_EXPIRES=2592000
-CORS_ORIGINS=http://localhost:3000,http://frontend:3000
+
+# Monitoring
+GRAFANA_ADMIN_PASSWORD=secure_grafana_password
+PROMETHEUS_RETENTION=30d
+
+# SSL/HTTPS
+SSL_CERTIFICATE_PATH=/etc/ssl/certs/cyber-risk.crt
+SSL_PRIVATE_KEY_PATH=/etc/ssl/private/cyber-risk.key
 ```
 
-Edit `frontend/.env`:
-```env
-REACT_APP_API_URL=http://localhost:5000/api
-REACT_APP_WS_URL=ws://localhost:5000
-```
-
-### 3. Deploy with Docker
-
+### 3. Deploy with Monitoring
 ```bash
-# Build and start all services
-docker-compose up -d
+# Start all services including monitoring
+docker-compose --env-file .env.prod up -d
 
-# View logs
-docker-compose logs -f
-
-# Check service health
+# Verify deployment
 docker-compose ps
 ```
 
-### 4. Access the Application
+## 🔧 Service Configuration
 
-- **Frontend**: http://localhost:3000
-- **Backend API**: http://localhost:5000/api
-- **API Documentation**: http://localhost:5000/api/docs (if implemented)
-
-## 🛠️ Development Setup
-
-### Backend Development
-
-```bash
-cd backend
-
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Set up environment
-cp .env.example .env
-# Edit .env with your local database settings
-
-# Initialize database
-flask db init
-flask db migrate -m "Initial migration" 
-flask db upgrade
-
-# Run development server
-python app.py
+### Frontend Configuration (`frontend/.env.prod`)
+```env
+REACT_APP_API_URL=https://api.yourdomain.com
+REACT_APP_WS_URL=wss://api.yourdomain.com
+REACT_APP_ENVIRONMENT=production
+GENERATE_SOURCEMAP=false
 ```
 
-### Frontend Development
-
-```bash
-cd frontend
-
-# Install dependencies
-npm install
-
-# Start development server
-npm start
-
-# Build for production
-npm run build
-
-# Run tests
-npm test
+### Backend Configuration (`backend/.env.prod`)
+```env
+FLASK_ENV=production
+DATABASE_URL=postgresql://cyber_user:secure_password@postgres:5432/cyber_risk_prod
+REDIS_URL=redis://redis:6379/0
+SECRET_KEY=your-super-secure-secret-key
+JWT_SECRET_KEY=your-jwt-secret-key
+CORS_ORIGINS=https://yourdomain.com,https://www.yourdomain.com
 ```
 
-## 🔧 Configuration
+## 🌐 Domain & SSL Setup
 
-### Backend Configuration
-
-The backend uses environment-based configuration:
-
-- **`config.py`**: Main configuration file with classes for different environments
-- **Environment variables**: Override configuration through `.env` file
-- **Database**: PostgreSQL with SQLAlchemy ORM
-- **Authentication**: JWT tokens with refresh token support
-- **CORS**: Configured for frontend communication
-
-### Frontend Configuration
-
-- **Environment variables**: Set API URLs and feature flags
-- **Theme**: Centralized theme configuration in `App.tsx`
-- **State management**: Zustand stores for auth, UI, and application state
-- **Routing**: React Router with protected routes
-
-### Simulation Engine Configuration
-
-Key parameters for Monte Carlo simulations:
-
-- **Frequency Distributions**: Poisson, Negative Binomial, Binomial
-- **Severity Distributions**: LogNormal, Pareto, Gamma, Exponential, Weibull
-- **Risk Metrics**: VaR, TVaR, Expected Loss, distribution statistics
-- **Financial Calculations**: Deductibles, limits, reinsurance modeling
-
-## 🧪 Testing
-
-### Backend Testing
-
-```bash
-cd backend
-
-# Run unit tests
-python -m pytest tests/ -v
-
-# Run with coverage
-python -m pytest tests/ --cov=app --cov-report=html
-
-# Test specific module
-python -m pytest tests/test_simulation.py -v
+### 1. DNS Configuration
+```dns
+# A Records
+yourdomain.com          → Your_Server_IP
+www.yourdomain.com      → Your_Server_IP
+api.yourdomain.com      → Your_Server_IP
+monitoring.yourdomain.com → Your_Server_IP
 ```
 
-### Frontend Testing
-
+### 2. SSL Certificate (Let's Encrypt)
 ```bash
-cd frontend
+# Install Certbot
+sudo apt install certbot python3-certbot-nginx
 
-# Run tests
-npm test
+# Generate certificates
+sudo certbot certonly --nginx -d yourdomain.com -d www.yourdomain.com -d api.yourdomain.com -d monitoring.yourdomain.com
 
-# Run tests with coverage
-npm test -- --coverage
-
-# Run tests in CI mode
-npm test -- --ci --coverage --watchAll=false
+# Auto-renewal
+sudo crontab -e
+# Add: 0 3 * * * certbot renew --quiet --no-self-upgrade
 ```
 
-## 📊 API Documentation
+## 🐳 Production Docker Configuration
 
-### Authentication Endpoints
+### `docker-compose.prod.yml`
+```yaml
+version: '3.8'
 
-- `POST /api/auth/register` - User registration
-- `POST /api/auth/login` - User login
-- `POST /api/auth/logout` - User logout
-- `GET /api/auth/profile` - Get user profile
-- `PUT /api/auth/profile` - Update user profile
-- `POST /api/auth/refresh` - Refresh access token
+services:
+  backend:
+    environment:
+      - FLASK_ENV=production
+      - GUNICORN_WORKERS=4
+      - GUNICORN_THREADS=2
+    deploy:
+      replicas: 3
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
+    restart: unless-stopped
 
-### Simulation Endpoints
+  frontend:
+    environment:
+      - NODE_ENV=production
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.25'
+    restart: unless-stopped
 
-- `POST /api/simulation/run` - Start new simulation
-- `GET /api/simulation/list` - List user simulations
-- `GET /api/simulation/{id}` - Get simulation details
-- `GET /api/simulation/{id}/results` - Get simulation results
-- `POST /api/simulation/{id}/stop` - Stop running simulation
-- `DELETE /api/simulation/{id}` - Delete simulation
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    depends_on:
+      - backend
+      - frontend
+    restart: unless-stopped
 
-### Portfolio Endpoints
+  postgres:
+    environment:
+      - POSTGRES_DB=cyber_risk_prod
+      - POSTGRES_USER=cyber_user
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_prod_data:/var/lib/postgresql/data
+      - ./backups:/backups
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+    restart: unless-stopped
 
-- `POST /api/portfolio/` - Create portfolio
-- `GET /api/portfolio/` - List portfolios
-- `GET /api/portfolio/{id}` - Get portfolio details
-- `PUT /api/portfolio/{id}` - Update portfolio
-- `DELETE /api/portfolio/{id}` - Delete portfolio
-- `POST /api/portfolio/{id}/policies` - Add policy to portfolio
+volumes:
+  postgres_prod_data:
+    driver: local
+```
 
-### Scenario Endpoints
+## 🔒 Security Hardening
 
-- `POST /api/scenarios/` - Create scenario
-- `GET /api/scenarios/` - List scenarios
-- `GET /api/scenarios/{id}` - Get scenario details
-- `PUT /api/scenarios/{id}` - Update scenario
-- `POST /api/scenarios/compare` - Compare multiple scenarios
+### 1. Firewall Configuration
+```bash
+# UFW Firewall Setup
+sudo ufw default deny incoming
+sudo ufw default allow outgoing
+sudo ufw allow ssh
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+sudo ufw enable
+```
 
-## 🔒 Security Features
+### 2. Docker Security
+```bash
+# Create dedicated user
+sudo useradd -r -s /bin/false cyberrisk
+sudo usermod -aG docker cyberrisk
 
-### Authentication & Authorization
+# Set file permissions
+sudo chown -R cyberrisk:cyberrisk /opt/cyber-risk-app
+sudo chmod 750 /opt/cyber-risk-app
+```
 
-- **JWT Tokens**: Access and refresh token system
-- **Password Hashing**: Bcrypt with salt rounds
-- **CORS Protection**: Configured allowed origins
-- **Input Validation**: Marshmallow schemas for API validation
-- **SQL Injection Protection**: SQLAlchemy ORM with parameterized queries
+### 3. Database Security
+```sql
+-- PostgreSQL Security
+CREATE ROLE cyber_readonly;
+GRANT CONNECT ON DATABASE cyber_risk_prod TO cyber_readonly;
+GRANT USAGE ON SCHEMA public TO cyber_readonly;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO cyber_readonly;
 
-### Infrastructure Security
+-- Create monitoring user
+CREATE USER monitoring_user WITH PASSWORD 'monitoring_password';
+GRANT cyber_readonly TO monitoring_user;
+```
 
-- **Docker Security**: Non-root user, minimal base images
-- **Environment Variables**: Secrets management through environment files
-- **HTTPS Support**: Nginx configuration for SSL/TLS
-- **Security Headers**: CSP, HSTS, X-Frame-Options configured
+## 📊 Monitoring Setup
+
+### 1. Grafana Configuration
+```bash
+# Access Grafana
+https://monitoring.yourdomain.com:3001
+# Login: admin / secure_grafana_password
+
+# Import dashboards
+# - Application Performance Dashboard
+# - Infrastructure Monitoring Dashboard  
+# - Business Intelligence Dashboard
+```
+
+### 2. Prometheus Targets
+```yaml
+# Additional production targets
+scrape_configs:
+  - job_name: 'cyber-risk-production'
+    static_configs:
+      - targets: ['backend:5000', 'backend-2:5000', 'backend-3:5000']
+    
+  - job_name: 'nginx'
+    static_configs:
+      - targets: ['nginx-exporter:9113']
+```
+
+### 3. AlertManager Notifications
+```yaml
+# Slack Integration
+receivers:
+  - name: 'slack-alerts'
+    slack_configs:
+      - api_url: 'YOUR_SLACK_WEBHOOK_URL'
+        channel: '#cyber-risk-alerts'
+        title: 'Cyber Risk Alert'
+        text: '{{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+
+# Email Integration  
+  - name: 'email-alerts'
+    email_configs:
+      - to: 'ops-team@company.com'
+        from: 'alerts@yourdomain.com'
+        smarthost: 'smtp.gmail.com:587'
+        auth_username: 'alerts@yourdomain.com'
+        auth_password: 'app_password'
+        subject: 'Cyber Risk System Alert'
+```
+
+## 🔄 Backup & Recovery
+
+### 1. Database Backup
+```bash
+#!/bin/bash
+# backup.sh
+DATE=$(date +%Y%m%d_%H%M%S)
+BACKUP_DIR="/backups"
+
+# PostgreSQL Backup
+docker exec postgres pg_dump -U cyber_user cyber_risk_prod > $BACKUP_DIR/db_backup_$DATE.sql
+
+# Compress and encrypt
+gzip $BACKUP_DIR/db_backup_$DATE.sql
+gpg --cipher-algo AES256 --compress-algo 1 --symmetric --output $BACKUP_DIR/db_backup_$DATE.sql.gz.gpg $BACKUP_DIR/db_backup_$DATE.sql.gz
+
+# Clean up old backups (keep 30 days)
+find $BACKUP_DIR -name "db_backup_*.gpg" -mtime +30 -delete
+
+# Upload to S3 (optional)
+aws s3 cp $BACKUP_DIR/db_backup_$DATE.sql.gz.gpg s3://your-backup-bucket/
+```
+
+### 2. Application State Backup
+```bash
+#!/bin/bash
+# backup_app_state.sh
+DATE=$(date +%Y%m%d_%H%M%S)
+
+# Backup uploaded files
+tar -czf /backups/uploads_$DATE.tar.gz /app/uploads/
+
+# Backup configuration
+tar -czf /backups/config_$DATE.tar.gz \
+    .env.prod \
+    backend/.env.prod \
+    frontend/.env.prod \
+    nginx/ \
+    monitoring/
+
+# Backup Grafana dashboards
+docker exec grafana grafana-cli admin export-dashboard > /backups/grafana_dashboards_$DATE.json
+```
+
+### 3. Automated Backup Schedule
+```cron
+# Crontab configuration
+0 2 * * * /opt/cyber-risk-app/scripts/backup.sh
+0 3 * * 0 /opt/cyber-risk-app/scripts/backup_app_state.sh
+```
+
+## 🚦 Health Checks & Monitoring
+
+### 1. Service Health Endpoints
+```bash
+# Application Health
+curl https://api.yourdomain.com/health
+
+# Detailed Health Check
+curl https://api.yourdomain.com/health/detailed
+
+# Prometheus Metrics
+curl https://api.yourdomain.com/metrics
+
+# Performance Report
+curl https://api.yourdomain.com/api/monitoring/performance
+```
+
+### 2. External Monitoring
+```bash
+# Uptime monitoring with external service
+# Configure monitoring for:
+# - https://yourdomain.com (Frontend)
+# - https://api.yourdomain.com/health (Backend API)
+# - https://monitoring.yourdomain.com (Grafana)
+```
+
+## 🔧 Maintenance Procedures
+
+### 1. Rolling Updates
+```bash
+# Zero-downtime deployment
+docker-compose pull
+docker-compose up -d --no-deps backend
+docker-compose up -d --no-deps frontend
+```
+
+### 2. Database Migrations
+```bash
+# Run migrations
+docker-compose exec backend flask db upgrade
+
+# Backup before migration
+./scripts/backup.sh
+```
+
+### 3. Log Management
+```bash
+# Log rotation configuration
+cat > /etc/logrotate.d/cyber-risk << EOF
+/var/lib/docker/containers/*/*-json.log {
+    daily
+    rotate 30
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 644 root root
+    postrotate
+        /bin/kill -USR1 $(cat /var/run/docker.pid) 2>/dev/null || true
+    endscript
+}
+EOF
+```
 
 ## 📈 Performance Optimization
 
-### Backend Performance
-
-- **Database Indexing**: Optimized queries with proper indexes
-- **Connection Pooling**: SQLAlchemy connection pool configuration
-- **Caching**: Redis for session and frequently accessed data
-- **Parallel Processing**: Multiprocessing for Monte Carlo simulations
-- **Async Operations**: WebSocket for real-time simulation updates
-
-### Frontend Performance
-
-- **Code Splitting**: Dynamic imports for route-based splitting
-- **Memoization**: React optimization with useMemo and useCallback
-- **Virtual Scrolling**: For large data sets in tables and lists
-- **Chart Optimization**: Efficient data visualization with Chart.js
-- **Bundle Optimization**: Webpack optimization for production builds
-
-## 🚀 Production Deployment
-
-### Environment Preparation
-
-1. **Server Setup**:
-   ```bash
-   # Update system
-   sudo apt update && sudo apt upgrade -y
-   
-   # Install Docker and Docker Compose
-   curl -fsSL https://get.docker.com -o get-docker.sh
-   sudo sh get-docker.sh
-   sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-   sudo chmod +x /usr/local/bin/docker-compose
-   ```
-
-2. **SSL Certificate** (Let's Encrypt):
-   ```bash
-   # Install Certbot
-   sudo apt install certbot
-   
-   # Generate certificate
-   sudo certbot certonly --standalone -d yourdomain.com
-   ```
-
-3. **Production Environment**:
-   ```bash
-   # Set production environment variables
-   export FLASK_ENV=production
-   export DATABASE_URL=postgresql://user:pass@prod-db:5432/cyber_risk
-   
-   # Deploy with production profile
-   docker-compose --profile production up -d
-   ```
-
-### Nginx Configuration
-
-Create production Nginx configuration in `nginx/nginx.conf`:
-
-```nginx
-upstream backend {
-    server backend:5000;
-}
-
-upstream frontend {
-    server frontend:3000;
-}
-
-server {
-    listen 80;
-    server_name yourdomain.com;
-    return 301 https://$server_name$request_uri;
-}
-
-server {
-    listen 443 ssl http2;
-    server_name yourdomain.com;
-    
-    ssl_certificate /etc/ssl/fullchain.pem;
-    ssl_certificate_key /etc/ssl/privkey.pem;
-    
-    location / {
-        proxy_pass http://frontend;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-    }
-    
-    location /api {
-        proxy_pass http://backend;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-    }
-    
-    location /socket.io {
-        proxy_pass http://backend;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-    }
-}
+### 1. Database Optimization
+```sql
+-- PostgreSQL Performance Tuning
+ALTER SYSTEM SET shared_buffers = '256MB';
+ALTER SYSTEM SET effective_cache_size = '1GB';
+ALTER SYSTEM SET maintenance_work_mem = '64MB';
+ALTER SYSTEM SET checkpoint_completion_target = 0.7;
+ALTER SYSTEM SET wal_buffers = '16MB';
+ALTER SYSTEM SET default_statistics_target = 100;
+SELECT pg_reload_conf();
 ```
 
-## 📝 Usage Guide
+### 2. Redis Configuration
+```conf
+# redis.conf production settings
+maxmemory 512mb
+maxmemory-policy allkeys-lru
+save 900 1
+save 300 10
+save 60 10000
+```
 
-### 1. User Registration and Login
-
-1. Navigate to http://localhost:3000
-2. Click "Register" to create a new account
-3. Fill in email, username, and password
-4. Login with your credentials
-
-### 2. Creating a Portfolio
-
-1. Go to "Portfolio" section
-2. Click "Create New Portfolio"
-3. Add policies with coverage details:
-   - Policy number and holder information
-   - Coverage limits and deductibles
-   - Industry sector and risk attributes
-
-### 3. Running Simulations
-
-1. Navigate to "Simulation" page
-2. Configure simulation parameters:
-   - **Frequency Distribution**: Choose from Poisson, Negative Binomial, or Binomial
-   - **Severity Distribution**: Select LogNormal, Pareto, Gamma, Exponential, or Weibull
-   - **Number of Iterations**: Typically 10,000 - 100,000 for stable results
-   - **Risk Parameters**: Set distribution parameters based on historical data
-
-3. Advanced Settings:
-   - Enable correlation between frequency and severity
-   - Configure deductibles and coverage limits
-   - Set up reinsurance arrangements
-   - Choose parallel processing options
-
-4. Click "Run Simulation" and monitor progress via real-time updates
-
-### 4. Analyzing Results
-
-The results dashboard provides:
-
-- **Risk Metrics**: VaR at 95%, 99%, and 99.9% confidence levels
-- **Distribution Charts**: Histogram of loss distribution
-- **Exceedance Curves**: Probability of exceeding loss thresholds
-- **Statistical Measures**: Expected loss, standard deviation, skewness, kurtosis
-
-### 5. Scenario Analysis
-
-1. Create scenarios with modified parameters
-2. Compare baseline vs. stressed scenarios
-3. Analyze impact of parameter changes
-4. Export results for reporting
-
-## 🔍 Monitoring and Logging
-
-### Application Monitoring
-
+### 3. Application Performance
 ```bash
-# View application logs
-docker-compose logs -f backend
-docker-compose logs -f frontend
+# Enable application profiling
+export PROFILE_ENABLED=true
+export PROFILE_THRESHOLD_MS=100
 
-# Monitor resource usage
-docker stats
-
-# Check health status
-curl http://localhost:5000/api/health
-curl http://localhost:3000/health
+# Configure connection pooling
+export DATABASE_POOL_SIZE=20
+export DATABASE_MAX_OVERFLOW=30
 ```
 
-### Database Monitoring
-
-```bash
-# Connect to PostgreSQL
-docker-compose exec db psql -U postgres -d cyber_risk
-
-# Check database size
-SELECT pg_size_pretty(pg_database_size('cyber_risk'));
-
-# Monitor active connections
-SELECT count(*) FROM pg_stat_activity;
-```
-
-## 🐛 Troubleshooting
+## 🚨 Troubleshooting Guide
 
 ### Common Issues
 
-1. **Port Conflicts**:
-   ```bash
-   # Check what's using port 5000
-   lsof -i :5000
-   # Kill process or change port in docker-compose.yml
-   ```
+#### 1. High Memory Usage
+```bash
+# Check memory usage
+docker stats
 
-2. **Database Connection Issues**:
-   ```bash
-   # Reset database
-   docker-compose down -v
-   docker-compose up -d db
-   # Wait for db to be ready, then start other services
-   ```
+# Scale down if needed
+docker-compose up -d --scale backend=2
 
-3. **Frontend Build Issues**:
-   ```bash
-   # Clear node modules and rebuild
-   cd frontend
-   rm -rf node_modules package-lock.json
-   npm install
-   npm run build
-   ```
+# Check for memory leaks
+curl https://api.yourdomain.com/api/monitoring/performance?hours=24
+```
 
-4. **Memory Issues with Simulations**:
-   - Reduce number of iterations
-   - Enable batch processing
-   - Adjust Docker memory limits
+#### 2. Database Connection Issues
+```bash
+# Check database connections
+docker-compose exec postgres psql -U cyber_user -d cyber_risk_prod -c "SELECT count(*) FROM pg_stat_activity;"
 
-### Performance Tuning
+# Restart database if needed
+docker-compose restart postgres
+```
 
-1. **Database Performance**:
-   ```sql
-   -- Add indexes for common queries
-   CREATE INDEX idx_simulation_runs_user_id ON simulation_runs(user_id);
-   CREATE INDEX idx_simulation_runs_status ON simulation_runs(status);
-   ```
+#### 3. SSL Certificate Issues
+```bash
+# Check certificate expiry
+openssl x509 -in /etc/letsencrypt/live/yourdomain.com/cert.pem -noout -dates
 
-2. **Redis Configuration**:
-   ```bash
-   # Increase Redis memory limit
-   docker-compose exec redis redis-cli CONFIG SET maxmemory 512mb
-   ```
+# Force renewal
+sudo certbot renew --force-renewal
+docker-compose restart nginx
+```
 
-## 📚 Additional Resources
+## 📞 Support & Maintenance
 
-- **Flask Documentation**: https://flask.palletsprojects.com/
-- **React Documentation**: https://reactjs.org/docs/
-- **Docker Documentation**: https://docs.docker.com/
-- **PostgreSQL Documentation**: https://www.postgresql.org/docs/
-- **Monte Carlo Methods**: Academic papers and risk management resources
+### Monitoring Contacts
+- **Critical Alerts**: ops-team@company.com
+- **Performance Issues**: dev-team@company.com
+- **Security Issues**: security@company.com
 
-## 🤝 Contributing
+### Escalation Procedures
+1. **Level 1**: Service degradation (< 2 hours)
+2. **Level 2**: Service outage (< 30 minutes)
+3. **Level 3**: Security incident (< 15 minutes)
 
-1. Fork the repository
-2. Create feature branch: `git checkout -b feature/new-feature`
-3. Make changes and test thoroughly
-4. Commit with descriptive messages
-5. Push to branch and create pull request
-
-## 📄 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## 🆘 Support
-
-For issues and questions:
-
-1. Check this deployment guide
-2. Review application logs
-3. Check GitHub issues
-4. Create new issue with detailed information
+### Documentation Links
+- **Application Docs**: https://docs.yourdomain.com
+- **API Reference**: https://api.yourdomain.com/docs
+- **Monitoring**: https://monitoring.yourdomain.com
+- **GitHub Repository**: https://github.com/Manthanbhanushali010/Stochastic-Cyber-Risk-Simulation-Application
 
 ---
 
-**🎉 Your Stochastic Cyber Risk Simulation Application is now ready for production use!** 
+## 🎉 Deployment Checklist
+
+- [ ] Environment variables configured
+- [ ] SSL certificates installed
+- [ ] Database initialized and migrated
+- [ ] Monitoring stack deployed
+- [ ] Backup procedures tested
+- [ ] Health checks verified
+- [ ] Performance monitoring enabled
+- [ ] Security hardening applied
+- [ ] Documentation updated
+- [ ] Team training completed
+
+**Your enterprise-grade Cyber Risk Simulation Application is now production-ready!** 🚀 
