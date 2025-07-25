@@ -1,0 +1,91 @@
+name: 🛡️ Security Scanning
+
+on:
+  schedule:
+    - cron: '0 2 * * 1'  # Weekly on Monday at 2 AM
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  security-scan:
+    name: 🛡️ Comprehensive Security Scan
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
+
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: 📦 Install Security Tools
+        run: |
+          cd backend
+          pip install bandit safety semgrep
+          cd ../frontend
+          npm install -g @cyclonedx/cyclonedx-npm audit-ci
+
+      - name: 🔍 Python Security Scan (Bandit)
+        run: |
+          cd backend
+          bandit -r . -f sarif -o bandit-results.sarif || true
+          bandit -r . -ll
+
+      - name: 🔍 Python Dependency Scan (Safety)
+        run: |
+          cd backend
+          safety check --json --output safety-results.json || true
+          safety check
+
+      - name: 🔍 Code Analysis (Semgrep)
+        run: |
+          semgrep --config=auto --sarif --output=semgrep-results.sarif ./backend ./frontend
+
+      - name: 🔍 Frontend Dependency Audit
+        run: |
+          cd frontend
+          npm audit --audit-level=moderate
+          audit-ci --moderate
+
+      - name: 🔍 SBOM Generation
+        run: |
+          cd frontend
+          cyclonedx-npm --output-file frontend-sbom.json
+          cd ../backend
+          pip install cyclonedx-bom
+          cyclonedx-py -o backend-sbom.json
+
+      - name: 📊 Upload Security Results
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: |
+            backend/bandit-results.sarif
+            semgrep-results.sarif
+
+      - name: 📊 Upload Artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-scan-results
+          path: |
+            backend/bandit-results.sarif
+            backend/safety-results.json
+            semgrep-results.sarif
+            frontend-sbom.json
+            backend-sbom.json 

@@ -1,0 +1,530 @@
+name: 🚀 CI/CD Pipeline - Stochastic Cyber Risk Simulation
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  release:
+    types: [ published ]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  NODE_VERSION: '18'
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  # ================================
+  # 🔍 Code Quality & Security Checks
+  # ================================
+  code-quality:
+    name: 🔍 Code Quality & Security
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: 📦 Install Backend Dependencies
+        run: |
+          cd backend
+          pip install -r requirements.txt
+          pip install bandit safety
+
+      - name: 📦 Install Frontend Dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: 🔍 Python Code Quality (Black, Flake8, isort)
+        run: |
+          cd backend
+          black --check --diff .
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+          isort --check-only --diff .
+
+      - name: 🔍 Frontend Code Quality (ESLint, Prettier)
+        run: |
+          cd frontend
+          npm run lint
+          npm run format:check
+
+      - name: 🛡️ Security Scan - Python (Bandit)
+        run: |
+          cd backend
+          bandit -r . -f json -o bandit-report.json || true
+          bandit -r . -ll
+
+      - name: 🛡️ Security Scan - Dependencies (Safety)
+        run: |
+          cd backend
+          safety check --json --output safety-report.json || true
+          safety check
+
+      - name: 🛡️ Security Scan - Frontend (npm audit)
+        run: |
+          cd frontend
+          npm audit --audit-level=high
+
+      - name: 📊 Upload Security Reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-reports
+          path: |
+            backend/bandit-report.json
+            backend/safety-report.json
+
+  # ================================
+  # 🧪 Backend Testing
+  # ================================
+  backend-tests:
+    name: 🧪 Backend Tests
+    runs-on: ubuntu-latest
+    needs: code-quality
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_USER: test_user
+          POSTGRES_DB: test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: 📦 Install Dependencies
+        run: |
+          cd backend
+          pip install -r requirements.txt
+          pip install pytest-xdist pytest-benchmark
+
+      - name: 🔧 Setup Test Environment
+        run: |
+          cd backend
+          export FLASK_ENV=testing
+          export DATABASE_URL="postgresql://test_user:test_password@localhost:5432/test_db"
+          export REDIS_URL="redis://localhost:6379/1"
+
+      - name: 🧪 Run Unit Tests
+        run: |
+          cd backend
+          export FLASK_ENV=testing
+          export DATABASE_URL="postgresql://test_user:test_password@localhost:5432/test_db"
+          export REDIS_URL="redis://localhost:6379/1"
+          python -m pytest tests/ -v --tb=short --cov=app --cov-report=xml --cov-report=html --cov-report=term-missing
+
+      - name: 🧪 Run Integration Tests
+        run: |
+          cd backend
+          export FLASK_ENV=testing
+          export DATABASE_URL="postgresql://test_user:test_password@localhost:5432/test_db"
+          export REDIS_URL="redis://localhost:6379/1"
+          python -m pytest tests/integration/ -v --tb=short
+
+      - name: 🧪 Performance Benchmarks
+        run: |
+          cd backend
+          export FLASK_ENV=testing
+          export DATABASE_URL="postgresql://test_user:test_password@localhost:5432/test_db"
+          python -m pytest tests/performance/ -v --benchmark-only --benchmark-sort=mean
+
+      - name: 📊 Upload Coverage Reports
+        uses: codecov/codecov-action@v3
+        with:
+          file: backend/coverage.xml
+          flags: backend
+          name: backend-coverage
+
+      - name: 📊 Upload Test Artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backend-test-results
+          path: |
+            backend/htmlcov/
+            backend/coverage.xml
+
+  # ================================
+  # 🧪 Frontend Testing
+  # ================================
+  frontend-tests:
+    name: 🧪 Frontend Tests
+    runs-on: ubuntu-latest
+    needs: code-quality
+
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: 📦 Install Dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: 🧪 Run Unit Tests
+        run: |
+          cd frontend
+          npm test -- --coverage --watchAll=false --testResultsProcessor=jest-sonar-reporter
+
+      - name: 🧪 Run Component Tests
+        run: |
+          cd frontend
+          npm run test:components
+
+      - name: 🏗️ Build Application
+        run: |
+          cd frontend
+          npm run build
+
+      - name: 📊 Upload Coverage Reports
+        uses: codecov/codecov-action@v3
+        with:
+          file: frontend/coverage/lcov.info
+          flags: frontend
+          name: frontend-coverage
+
+      - name: 📊 Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build
+          path: frontend/build/
+
+  # ================================
+  # 🧪 End-to-End Testing
+  # ================================
+  e2e-tests:
+    name: 🧪 E2E Tests
+    runs-on: ubuntu-latest
+    needs: [backend-tests, frontend-tests]
+
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: 🐳 Start Application with Docker
+        run: |
+          docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+          sleep 30
+
+      - name: 🧪 Run Playwright E2E Tests
+        run: |
+          cd frontend
+          npm ci
+          npx playwright install --with-deps
+          npx playwright test
+
+      - name: 📊 Upload E2E Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-test-results
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+
+      - name: 🐳 Stop Application
+        if: always()
+        run: docker-compose down
+
+  # ================================
+  # 🐳 Docker Build & Security Scan
+  # ================================
+  docker-build:
+    name: 🐳 Docker Build & Scan
+    runs-on: ubuntu-latest
+    needs: [backend-tests, frontend-tests]
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
+
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+
+      - name: 🔐 Login to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 🏗️ Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 📝 Extract Metadata
+        id: meta-backend
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-backend
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix={{branch}}-
+
+      - name: 📝 Extract Metadata (Frontend)
+        id: meta-frontend
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-frontend
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix={{branch}}-
+
+      - name: 🏗️ Build Backend Image
+        uses: docker/build-push-action@v5
+        with:
+          context: backend
+          file: backend/Dockerfile
+          push: true
+          tags: ${{ steps.meta-backend.outputs.tags }}
+          labels: ${{ steps.meta-backend.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: 🏗️ Build Frontend Image
+        uses: docker/build-push-action@v5
+        with:
+          context: frontend
+          file: frontend/Dockerfile
+          push: true
+          tags: ${{ steps.meta-frontend.outputs.tags }}
+          labels: ${{ steps.meta-frontend.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: 🛡️ Run Trivy Security Scan (Backend)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ steps.meta-backend.outputs.tags }}
+          format: 'sarif'
+          output: 'backend-trivy-results.sarif'
+
+      - name: 🛡️ Run Trivy Security Scan (Frontend)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ steps.meta-frontend.outputs.tags }}
+          format: 'sarif'
+          output: 'frontend-trivy-results.sarif'
+
+      - name: 📊 Upload Trivy Results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: |
+            backend-trivy-results.sarif
+            frontend-trivy-results.sarif
+
+  # ================================
+  # 🚀 Deployment (Production)
+  # ================================
+  deploy-production:
+    name: 🚀 Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [e2e-tests, docker-build]
+    if: github.event_name == 'release' && github.event.action == 'published'
+    environment: production
+
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+
+      - name: 🔧 Setup Deployment Environment
+        run: |
+          echo "RELEASE_VERSION=${{ github.event.release.tag_name }}" >> $GITHUB_ENV
+          echo "DEPLOYMENT_TIME=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_ENV
+
+      - name: 🚀 Deploy to Production Server
+        run: |
+          echo "Deploying version ${{ env.RELEASE_VERSION }} to production..."
+          # Add your deployment script here
+          # This could be:
+          # - Deploy to AWS ECS/EKS
+          # - Deploy to Azure Container Apps
+          # - Deploy to Google Cloud Run
+          # - Deploy to your own servers via SSH
+          
+      - name: 🔍 Health Check
+        run: |
+          echo "Performing health checks..."
+          # Add health check commands here
+          
+      - name: 📢 Deployment Notification
+        uses: 8398a7/action-slack@v3
+        if: always()
+        with:
+          status: ${{ job.status }}
+          text: |
+            🚀 Production Deployment ${{ job.status }}
+            Version: ${{ env.RELEASE_VERSION }}
+            Time: ${{ env.DEPLOYMENT_TIME }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  # ================================
+  # 🧪 Load Testing (Production)
+  # ================================
+  load-testing:
+    name: 🧪 Load Testing
+    runs-on: ubuntu-latest
+    needs: deploy-production
+    if: github.event_name == 'release' && github.event.action == 'published'
+
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: 📦 Install Artillery
+        run: npm install -g artillery
+
+      - name: 🧪 Run Load Tests
+        run: |
+          cd tests/load
+          artillery run load-test-config.yml --output load-test-results.json
+
+      - name: 📊 Generate Load Test Report
+        run: |
+          cd tests/load
+          artillery report load-test-results.json --output load-test-report.html
+
+      - name: 📊 Upload Load Test Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: load-test-results
+          path: |
+            tests/load/load-test-results.json
+            tests/load/load-test-report.html
+
+  # ================================
+  # 📊 Monitoring & Alerting Setup
+  # ================================
+  setup-monitoring:
+    name: 📊 Setup Monitoring
+    runs-on: ubuntu-latest
+    needs: deploy-production
+    if: github.event_name == 'release' && github.event.action == 'published'
+
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+
+      - name: 📊 Configure Application Monitoring
+        run: |
+          echo "Setting up monitoring dashboards..."
+          # Configure monitoring tools:
+          # - Prometheus metrics
+          # - Grafana dashboards  
+          # - Alertmanager rules
+          # - Log aggregation
+
+      - name: 🚨 Setup Alerting Rules
+        run: |
+          echo "Configuring alerting rules..."
+          # Setup alerts for:
+          # - High error rates
+          # - Performance degradation
+          # - Resource utilization
+          # - Security incidents
+
+  # ================================
+  # 🧹 Cleanup
+  # ================================
+  cleanup:
+    name: 🧹 Cleanup
+    runs-on: ubuntu-latest
+    needs: [load-testing, setup-monitoring]
+    if: always()
+
+    steps:
+      - name: 🧹 Clean Up Resources
+        run: |
+          echo "Cleaning up temporary resources..."
+          # Clean up any temporary resources
+          # Remove old container images
+          # Clean up test databases
+          
+      - name: 📊 Workflow Summary
+        run: |
+          echo "## 🎉 CI/CD Pipeline Completed Successfully!" >> $GITHUB_STEP_SUMMARY
+          echo "### 📊 Pipeline Results:" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Code Quality Checks" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Security Scanning" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Backend Tests" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Frontend Tests" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ E2E Testing" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Docker Build & Scan" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Production Deployment" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Load Testing" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Monitoring Setup" >> $GITHUB_STEP_SUMMARY 

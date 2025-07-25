@@ -1,0 +1,261 @@
+config:
+  # Load Testing Configuration for Stochastic Cyber Risk Simulation
+  target: 'http://localhost:5000'
+  
+  # Test phases
+  phases:
+    # Warm-up phase
+    - duration: 60
+      arrivalRate: 5
+      name: "Warm-up"
+    
+    # Ramp-up phase
+    - duration: 300
+      arrivalRate: 5
+      rampTo: 50
+      name: "Ramp-up"
+    
+    # Sustained load phase
+    - duration: 600
+      arrivalRate: 50
+      name: "Sustained Load"
+    
+    # Peak load phase
+    - duration: 300
+      arrivalRate: 50
+      rampTo: 100
+      name: "Peak Load"
+    
+    # Cool-down phase
+    - duration: 120
+      arrivalRate: 100
+      rampTo: 10
+      name: "Cool-down"
+
+  # Request defaults
+  defaults:
+    headers:
+      Content-Type: 'application/json'
+      User-Agent: 'LoadTest/1.0'
+
+  # Performance thresholds
+  ensure:
+    # Response time thresholds
+    p95: 2000  # 95th percentile under 2 seconds
+    p99: 5000  # 99th percentile under 5 seconds
+    median: 500  # Median under 500ms
+    
+    # Error rate threshold
+    maxErrorRate: 5  # Max 5% error rate
+
+  # Metrics collection
+  engines:
+    http:
+      timeout: 30
+      pool: 50
+      maxSockets: 100
+
+  # Test data
+  payload:
+    path: "test-data.csv"
+    fields:
+      - "email"
+      - "password"
+      - "simulation_name"
+
+scenarios:
+  # Authentication Load Test
+  - name: "Authentication Flow"
+    weight: 30
+    flow:
+      - post:
+          url: "/api/auth/login"
+          json:
+            email: "test-{{ $randomString() }}@example.com"
+            password: "password123"
+          capture:
+            - json: "$.access_token"
+              as: "auth_token"
+          expect:
+            - statusCode: 200
+            - hasProperty: "access_token"
+
+      - get:
+          url: "/api/auth/profile"
+          headers:
+            Authorization: "Bearer {{ auth_token }}"
+          expect:
+            - statusCode: 200
+
+      - post:
+          url: "/api/auth/logout"
+          headers:
+            Authorization: "Bearer {{ auth_token }}"
+          expect:
+            - statusCode: 200
+
+  # Simulation Creation Load Test
+  - name: "Simulation Operations"
+    weight: 40
+    flow:
+      # Login first
+      - post:
+          url: "/api/auth/login"
+          json:
+            email: "loadtest@example.com"
+            password: "password123"
+          capture:
+            - json: "$.access_token"
+              as: "auth_token"
+
+      # Create simulation
+      - post:
+          url: "/api/simulation/run"
+          headers:
+            Authorization: "Bearer {{ auth_token }}"
+          json:
+            name: "Load Test Simulation {{ $randomString() }}"
+            description: "Performance testing simulation"
+            iterations: 1000
+            random_seed: "{{ $randomInt(1, 10000) }}"
+            confidence_levels: [90, 95, 99]
+            event_parameters:
+              frequency_distribution:
+                type: "poisson"
+                parameters:
+                  lambda: "{{ $randomNumber(1.0, 5.0) }}"
+              severity_distribution:
+                type: "lognormal"
+                parameters:
+                  mean: "{{ $randomNumber(8.0, 12.0) }}"
+                  std: "{{ $randomNumber(1.0, 2.0) }}"
+            portfolio:
+              total_value: "{{ $randomInt(500000, 2000000) }}"
+              policies:
+                - id: "policy-1"
+                  limit: "{{ $randomInt(100000, 1000000) }}"
+                  deductible: "{{ $randomInt(5000, 50000) }}"
+                  coinsurance: 0.2
+                  premium: 20000
+          capture:
+            - json: "$.id"
+              as: "simulation_id"
+          expect:
+            - statusCode: 202
+
+      # Check simulation status
+      - get:
+          url: "/api/simulation/{{ simulation_id }}"
+          headers:
+            Authorization: "Bearer {{ auth_token }}"
+          expect:
+            - statusCode: 200
+
+      # List simulations
+      - get:
+          url: "/api/simulation/list"
+          headers:
+            Authorization: "Bearer {{ auth_token }}"
+          expect:
+            - statusCode: 200
+
+  # Portfolio Management Load Test
+  - name: "Portfolio Operations"
+    weight: 20
+    flow:
+      # Login
+      - post:
+          url: "/api/auth/login"
+          json:
+            email: "loadtest@example.com"
+            password: "password123"
+          capture:
+            - json: "$.access_token"
+              as: "auth_token"
+
+      # Create portfolio
+      - post:
+          url: "/api/portfolio/"
+          headers:
+            Authorization: "Bearer {{ auth_token }}"
+          json:
+            name: "Load Test Portfolio {{ $randomString() }}"
+            description: "Performance testing portfolio"
+            total_value: "{{ $randomInt(1000000, 5000000) }}"
+            industry: "technology"
+          capture:
+            - json: "$.id"
+              as: "portfolio_id"
+          expect:
+            - statusCode: 201
+
+      # Get portfolio
+      - get:
+          url: "/api/portfolio/{{ portfolio_id }}"
+          headers:
+            Authorization: "Bearer {{ auth_token }}"
+          expect:
+            - statusCode: 200
+
+      # Add policy to portfolio
+      - post:
+          url: "/api/portfolio/{{ portfolio_id }}/policies"
+          headers:
+            Authorization: "Bearer {{ auth_token }}"
+          json:
+            name: "Load Test Policy"
+            limit: "{{ $randomInt(100000, 1000000) }}"
+            deductible: "{{ $randomInt(5000, 50000) }}"
+            premium: "{{ $randomInt(10000, 100000) }}"
+            coverage_type: "cyber"
+          expect:
+            - statusCode: 201
+
+      # Get portfolio summary
+      - get:
+          url: "/api/portfolio/{{ portfolio_id }}/summary"
+          headers:
+            Authorization: "Bearer {{ auth_token }}"
+          expect:
+            - statusCode: 200
+
+  # System Health Checks
+  - name: "System Health"
+    weight: 10
+    flow:
+      # Health check (unauthenticated)
+      - get:
+          url: "/api/system/health"
+          expect:
+            - statusCode: 200
+            - hasProperty: "status"
+
+      # System info (unauthenticated)
+      - get:
+          url: "/api/system/info"
+          expect:
+            - statusCode: 200
+
+      # Swagger documentation
+      - get:
+          url: "/docs/"
+          expect:
+            - statusCode: 200
+
+# Plugins for enhanced reporting
+config:
+  plugins:
+    metrics-by-endpoint:
+      useOnlyRequestNames: true
+    
+    publish-metrics:
+      - type: cloudwatch
+        region: us-east-1
+        
+    hdrhistogram: {}
+    
+    expect: {}
+
+# Custom functions for data generation
+config:
+  processor: "./load-test-functions.js" 
