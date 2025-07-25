@@ -1,0 +1,37 @@
+{
+  "version": 2,
+  "name": "cyber-risk-simulation",
+  "builds": [
+    {
+      "src": "frontend/package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "build"
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/static/(.*)",
+      "headers": {
+        "cache-control": "public, max-age=31536000, immutable"
+      }
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
+    }
+  ],
+  "env": {
+    "REACT_APP_API_URL": "https://cyber-risk-backend.onrender.com",
+    "REACT_APP_WS_URL": "wss://cyber-risk-backend.onrender.com",
+    "REACT_APP_ENVIRONMENT": "production"
+  },
+  "build": {
+    "env": {
+      "REACT_APP_API_URL": "https://cyber-risk-backend.onrender.com",
+      "REACT_APP_WS_URL": "wss://cyber-risk-backend.onrender.com",
+      "REACT_APP_ENVIRONMENT": "production"
+    }
+  }
+} 

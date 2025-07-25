@@ -1,0 +1,43 @@
+services:
+  - type: web
+    name: cyber-risk-backend
+    env: docker
+    repo: https://github.com/Manthanbhanushali010/Stochastic-Cyber-Risk-Simulation-Application.git
+    dockerfilePath: ./backend/Dockerfile
+    plan: free
+    region: ohio
+    buildCommand: ""
+    startCommand: ""
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: SECRET_KEY
+        generateValue: true
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: cyber-risk-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: cyber-risk-redis
+          property: connectionString
+      - key: CORS_ORIGINS
+        value: https://cyber-risk-simulation.vercel.app,https://stochastic-cyber-risk-simulation-application.vercel.app
+    healthCheckPath: /health
+
+databases:
+  - name: cyber-risk-db
+    databaseName: cyber_risk
+    user: cyber_user
+    plan: free
+    region: ohio
+    postgresMajorVersion: 15
+
+  - type: redis
+    name: cyber-risk-redis
+    plan: free
+    region: ohio
+    maxmemoryPolicy: allkeys-lru 
