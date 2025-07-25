@@ -27,6 +27,14 @@ cors = CORS()
 jwt = JWTManager()
 socketio = SocketIO()
 
+# Initialize monitoring components
+from app.monitoring import PrometheusMetrics, BusinessMetrics, HealthChecker, PerformanceProfiler, alert_manager
+prometheus_metrics = PrometheusMetrics()
+business_metrics = BusinessMetrics()  
+health_checker = HealthChecker()
+profiler = PerformanceProfiler()
+# alert_manager is imported as a global instance
+
 # Global API instance (will be initialized in create_app)
 api = None
 

@@ -1,0 +1,187 @@
+groups:
+  - name: cyber-risk-simulation-alerts
+    rules:
+      # System Alerts
+      - alert: HighCPUUsage
+        expr: system_cpu_usage_percent > 80
+        for: 5m
+        labels:
+          severity: warning
+          service: cyber-risk-simulation
+        annotations:
+          summary: "High CPU usage detected"
+          description: "CPU usage is {{ $value }}% which is above the 80% threshold"
+
+      - alert: CriticalCPUUsage
+        expr: system_cpu_usage_percent > 95
+        for: 2m
+        labels:
+          severity: critical
+          service: cyber-risk-simulation
+        annotations:
+          summary: "Critical CPU usage detected"
+          description: "CPU usage is {{ $value }}% which is above the 95% critical threshold"
+
+      - alert: HighMemoryUsage
+        expr: (system_memory_usage_bytes / 1024 / 1024 / 1024) > 6
+        for: 5m
+        labels:
+          severity: warning
+          service: cyber-risk-simulation
+        annotations:
+          summary: "High memory usage detected"
+          description: "Memory usage is {{ $value }}GB which is above the 6GB threshold"
+
+      - alert: CriticalMemoryUsage
+        expr: (system_memory_usage_bytes / 1024 / 1024 / 1024) > 7
+        for: 2m
+        labels:
+          severity: critical
+          service: cyber-risk-simulation
+        annotations:
+          summary: "Critical memory usage detected"
+          description: "Memory usage is {{ $value }}GB which is above the 7GB critical threshold"
+
+      - alert: HighDiskUsage
+        expr: system_disk_usage_percent > 85
+        for: 10m
+        labels:
+          severity: warning
+          service: cyber-risk-simulation
+        annotations:
+          summary: "High disk usage detected"
+          description: "Disk usage is {{ $value }}% which is above the 85% threshold"
+
+      - alert: CriticalDiskUsage
+        expr: system_disk_usage_percent > 95
+        for: 5m
+        labels:
+          severity: critical
+          service: cyber-risk-simulation
+        annotations:
+          summary: "Critical disk usage detected"
+          description: "Disk usage is {{ $value }}% which is above the 95% critical threshold"
+
+      # Application Performance Alerts
+      - alert: HighResponseTime
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+          service: cyber-risk-simulation
+        annotations:
+          summary: "High API response time detected"
+          description: "95th percentile response time is {{ $value }}s which is above 2s threshold"
+
+      - alert: CriticalResponseTime
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 5
+        for: 2m
+        labels:
+          severity: critical
+          service: cyber-risk-simulation
+        annotations:
+          summary: "Critical API response time detected"
+          description: "95th percentile response time is {{ $value }}s which is above 5s critical threshold"
+
+      - alert: HighErrorRate
+        expr: (rate(http_requests_total{status_code=~"4..|5.."}[5m]) / rate(http_requests_total[5m])) * 100 > 5
+        for: 5m
+        labels:
+          severity: warning
+          service: cyber-risk-simulation
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is {{ $value }}% which is above the 5% threshold"
+
+      - alert: CriticalErrorRate
+        expr: (rate(http_requests_total{status_code=~"4..|5.."}[5m]) / rate(http_requests_total[5m])) * 100 > 10
+        for: 2m
+        labels:
+          severity: critical
+          service: cyber-risk-simulation
+        annotations:
+          summary: "Critical error rate detected"
+          description: "Error rate is {{ $value }}% which is above the 10% critical threshold"
+
+      # Database Alerts
+      - alert: DatabaseConnectionsHigh
+        expr: database_connections_active > 80
+        for: 5m
+        labels:
+          severity: warning
+          service: cyber-risk-simulation
+        annotations:
+          summary: "High database connections"
+          description: "Active database connections: {{ $value }} which is above 80 threshold"
+
+      - alert: DatabaseSlowQueries
+        expr: histogram_quantile(0.95, rate(database_query_duration_seconds_bucket[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+          service: cyber-risk-simulation
+        annotations:
+          summary: "Slow database queries detected"
+          description: "95th percentile query time is {{ $value }}s which is above 1s threshold"
+
+      # Business Logic Alerts
+      - alert: SimulationFailureRate
+        expr: (rate(simulations_total{status="failed"}[10m]) / rate(simulations_total[10m])) * 100 > 10
+        for: 5m
+        labels:
+          severity: warning
+          service: cyber-risk-simulation
+        annotations:
+          summary: "High simulation failure rate"
+          description: "Simulation failure rate is {{ $value }}% which is above 10% threshold"
+
+      - alert: NoSimulationsRunning
+        expr: rate(simulations_total[30m]) == 0
+        for: 30m
+        labels:
+          severity: warning
+          service: cyber-risk-simulation
+        annotations:
+          summary: "No simulations running"
+          description: "No simulations have been executed in the last 30 minutes"
+
+      # Service Health Alerts
+      - alert: ServiceDown
+        expr: up{job="cyber-risk-simulation"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: cyber-risk-simulation
+        annotations:
+          summary: "Cyber Risk Simulation service is down"
+          description: "The Cyber Risk Simulation service has been down for more than 1 minute"
+
+      - alert: HealthCheckFailing
+        expr: rate(http_requests_total{endpoint="/health", status_code!="200"}[5m]) > 0
+        for: 2m
+        labels:
+          severity: critical
+          service: cyber-risk-simulation
+        annotations:
+          summary: "Health check failing"
+          description: "Health check endpoint is returning non-200 status codes"
+
+  - name: prometheus-meta
+    rules:
+      - alert: PrometheusConfigReloadFailed
+        expr: prometheus_config_last_reload_successful != 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Prometheus configuration reload has failed"
+          description: "Prometheus configuration reload error"
+
+      - alert: PrometheusNotConnectedToAlertmanager
+        expr: prometheus_notifications_alertmanagers_discovered < 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Prometheus is not connected to any Alertmanager"
+          description: "Prometheus cannot connect to Alertmanager" 

@@ -60,3 +60,16 @@ pytz==2023.3
 # Production Server
 gunicorn==21.2.0
 eventlet==0.33.3 
+
+# Performance Monitoring and Observability
+prometheus-client==0.18.0
+prometheus-flask-exporter==0.23.0
+py-healthcheck==1.10.1
+psutil==5.9.6
+memory-profiler==0.61.0
+
+# Application Performance Monitoring (APM)
+elastic-apm==6.18.1
+
+# System Monitoring
+sentry-sdk[flask]==1.38.0 
