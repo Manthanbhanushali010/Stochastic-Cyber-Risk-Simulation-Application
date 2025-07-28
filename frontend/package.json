@@ -45,16 +45,15 @@
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
-    "test:components": "react-scripts test --testPathPattern=components --watchAll=false",
-    "test:coverage": "react-scripts test --coverage --watchAll=false",
     "eject": "react-scripts eject",
-    "lint": "eslint src --ext .ts,.tsx",
-    "lint:fix": "eslint src --ext .ts,.tsx --fix",
-    "format": "prettier --write src/**/*.{ts,tsx,css,md}",
-    "format:check": "prettier --check src/**/*.{ts,tsx,css,md}",
+    "test:components": "react-scripts test --testPathPattern=src/__tests__/components --coverage --watchAll=false",
+    "test:coverage": "react-scripts test --coverage --watchAll=false",
     "e2e": "playwright test",
     "e2e:headed": "playwright test --headed",
-    "e2e:debug": "playwright test --debug"
+    "e2e:debug": "playwright test --debug",
+    "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx,css,md}\"",
+    "format:check": "prettier --check \"src/**/*.{js,jsx,ts,tsx,css,md}\"",
+    "vercel-build": "npm run build"
   },
   "eslintConfig": {
     "extends": [
